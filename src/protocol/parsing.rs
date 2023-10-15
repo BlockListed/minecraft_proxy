@@ -10,6 +10,8 @@ const VARINT_CONTINUE_BIT: u8 = 1 << 7;
 fn write_varint(output: &mut Vec<u8>, v: i32) {
 	let mut bits: u32 = unsafe { mem::transmute::<_, u32>(v) };
 
+	println!("Serialising {bits:032b}");
+
 	if bits == 0 {
 		output.push(0);
 		return;
@@ -37,23 +39,20 @@ fn write_varint(output: &mut Vec<u8>, v: i32) {
 }
 
 fn read_varint<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], i32> {
-	let empty: &[u8] = &[];
-	let (input, until_stop) = match take_till(|v| v & VARINT_CONTINUE_BIT == 1)(input) {
-		Ok(d) => d,
-		Err(e) => match e {
-			nom::Err::Incomplete(_) => (input, empty),
-			_ => return Err(e),
-		}
-	};
+	let (input, until_stop) = take_till(|v| v & VARINT_CONTINUE_BIT == 0)(input)?;
 	let (input, stop_byte) = take::<_, &[u8], ()>(1usize)(input).unwrap();
 
 	assert!(until_stop.len() + stop_byte.len() <= 5, "Varints max out at 5 bytes");
+
+	println!("Deserializing varint of length {}.", until_stop.len() + stop_byte.len(), );
 
 	let mut output: u32 = 0;
 	let mut position = 0usize;
 
 	for i in until_stop.into_iter().chain(stop_byte.into_iter()).copied() {
-		output |= ((i & VARINT_SEGMENT_VALUE_MASK) as u32) << position;
+		let var_value = ((i & VARINT_SEGMENT_VALUE_MASK) as u32) << position;
+		println!("Adding {var_value} to output");
+		output |= var_value;
 		position += 7;
 	}
 
