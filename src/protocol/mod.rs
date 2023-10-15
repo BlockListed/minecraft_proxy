@@ -6,6 +6,9 @@ use tokio::net::TcpStream;
 use tokio::time::timeout;
 use tokio::time::Duration;
 
+use tokio_retry::Retry;
+use tokio_retry::strategy::{FixedInterval, jitter};
+
 use crate::protocol::parsing::ParseError;
 
 mod parsing;
@@ -76,4 +79,13 @@ pub async fn ping(addr: &str) -> Option<parsing::JsonStatusResponse> {
 			}
 		}
 	}
+}
+
+pub async fn retry_ping(addr: &str) -> Option<parsing::JsonStatusResponse> {
+	let strategy = FixedInterval::from_millis(250)
+		.map(jitter);
+
+	Retry::spawn(strategy, || async {
+		ping(addr).await.ok_or("couldn't contact server")
+	}).await.ok()
 }

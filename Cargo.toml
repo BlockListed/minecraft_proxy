@@ -13,5 +13,6 @@ serde = { version = "1.0.189", features = ["derive"] }
 serde_json = "1.0.107"
 thiserror = "1.0.49"
 tokio = { version = "1.32.0", features = ["rt-multi-thread", "macros", "net", "io-util", "time"] }
+tokio-retry = "0.3.0"
 tracing = "0.1.39"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }

@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use protocol::ping;
+use protocol::retry_ping;
 use tokio::{net::{TcpListener, TcpStream}, io::copy_bidirectional};
 
 mod protocol;
@@ -19,7 +19,7 @@ fn setup_logger() {
 async fn main() {
     setup_logger();
 
-    ping("localhost:25565").await;
+    retry_ping("localhost:25565").await;
 
     let listener = TcpListener::bind("127.0.0.1:2000".parse::<SocketAddr>().unwrap()).await.unwrap();
 
