@@ -1,7 +1,8 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
-use protocol::retry_ping;
-use tokio::{net::{TcpListener, TcpStream}, io::copy_bidirectional};
+use protocol::{retry_ping, ping};
+use server::{Server, DockerServer};
+use tokio::{net::{TcpListener, TcpStream}, io::copy_bidirectional, sync::Mutex};
 
 mod protocol;
 mod server;
@@ -19,19 +20,35 @@ fn setup_logger() {
 async fn main() {
     setup_logger();
 
-    retry_ping(([127, 0, 0, 1], 25565).into()).await;
-
     let listener = TcpListener::bind("127.0.0.1:2000".parse::<SocketAddr>().unwrap()).await.unwrap();
+
+    let server = Arc::new(Mutex::new(DockerServer::new("mc")));
 
     loop {
         let (conn, _) = listener.accept().await.unwrap();
 
-        tokio::spawn(handle_conn(conn));
+        tokio::spawn(handle_conn(conn, Arc::clone(&server)));
     }
 }
 
-async fn handle_conn(mut conn: TcpStream) {
-    let mut mc_server = TcpStream::connect("127.0.0.1:25565".parse::<SocketAddr>().unwrap()).await.unwrap();
+async fn get_connection<S: Server>(server: &mut S) -> TcpStream {
+    if let Some(addr) = server.addr() {
+        if ping(addr).await.is_some() {
+            return TcpStream::connect(addr).await.unwrap();
+        }
+    }
+
+    server.start().await.unwrap();
+
+    let addr = server.addr().unwrap();
+
+    retry_ping(addr).await.unwrap();
+
+    TcpStream::connect(addr).await.unwrap()
+}
+
+async fn handle_conn<S: Server>(mut conn: TcpStream, server: Arc<Mutex<S>>) {
+    let mut mc_server = get_connection(&mut *server.lock().await).await;
 
     copy_bidirectional(&mut conn, &mut mc_server).await.unwrap();
 }
