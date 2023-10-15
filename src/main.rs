@@ -5,6 +5,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::io::copy_bidirectional;
 use tokio::sync::Mutex;
 
+mod manager;
 mod protocol;
 mod server;
 
@@ -27,6 +28,10 @@ async fn main() {
     let listener = TcpListener::bind("127.0.0.1:2000".parse::<SocketAddr>().unwrap()).await.unwrap();
 
     let server = Arc::new(Mutex::new(DockerServer::new("mc")));
+
+    let manager = manager::ServerManager::new(Arc::clone(&server));
+
+    tokio::spawn(manager.probe_task());
 
     loop {
         let (conn, _) = listener.accept().await.unwrap();
