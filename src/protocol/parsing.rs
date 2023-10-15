@@ -162,7 +162,7 @@ fn read_packet<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], (i32, &'n [u8])> {
 pub fn server_list_ping(server_host: &str, server_port: u16) -> Vec<u8> {
 	let packet_id = 0x00;
 	let protocol_version = -1;
-	let next_state = -1;
+	let next_state = 1;
 
 	let data_len = varint_len(protocol_version) + str_len(server_host) + 2 + varint_len(next_state);
 

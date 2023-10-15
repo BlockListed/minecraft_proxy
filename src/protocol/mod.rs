@@ -59,6 +59,7 @@ pub async fn ping(addr: &str) -> bool {
 			panic!("Connection closed");
 		}
 
+		println!("Read {read} bytes of data: {resp_buffer:?}");
 		if let Some(status) = parsing::parse_status_response(&resp_buffer[..read]) {
 			println!("{:?}", status.1);
 			break;
