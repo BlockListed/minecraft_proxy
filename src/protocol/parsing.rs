@@ -42,8 +42,10 @@ fn read_varint<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], i32> {
 	let span = tracing::debug_span!("Deserializing varint");
 	let _guard = span.enter();
 
+	// All varint bytes except for the last one
 	let (input, until_stop) = take_till(|v| v & VARINT_CONTINUE_BIT == 0)(input)?;
-	let (input, stop_byte) = take::<_, &[u8], nom::error::Error<&[u8]>>(1usize)(input)?;
+	// The final varint byte
+	let (input, stop_byte) = take::<_, &[u8], nom::error::Error<&[u8]>>(1_usize)(input)?;
 
 	let len = until_stop.len() + stop_byte.len();
 
@@ -52,7 +54,7 @@ fn read_varint<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], i32> {
 	assert!(len <= 5, "Varints max out at 5 bytes");
 
 	let mut output: u32 = 0;
-	let mut position = 0usize;
+	let mut position = 0_usize;
 
 	for i in until_stop.into_iter().chain(stop_byte.into_iter()).copied() {
 		let var_value = ((i & VARINT_SEGMENT_VALUE_MASK) as u32) << position;
@@ -67,14 +69,21 @@ fn read_varint<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], i32> {
 }
 
 fn varint_len(v: i32) -> usize {
+	// Amount of bits necessary to represent the number.
+	// Eg:
+	// -1 -> 32 (because of two's complement)
+	// 1 -> 1
+	// 128 -> 8
+	// 16384 -> 15
 	let bits = 32 - v.leading_zeros();
+
 	match bits {
 		0..=7 => 1,
 		8..=14 => 2,
 		15..=21 => 3,
 		22..=28 => 4,
 		29..=32 => 5,
-		_ => panic!("Leading zeros should b between 0 and 32"),
+		_ => panic!("Leading zeros should be between 0 and 32"),
 	}
 }
 
@@ -92,7 +101,7 @@ fn read_short<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], u16> {
 	let span = tracing::debug_span!("read short");
 	let _enter = span.enter();
 
-	let (input, short_bytes) = take(2usize)(input)?;
+	let (input, short_bytes) = take(2_usize)(input)?;
 	tracing::debug!(?short_bytes, "deserializing short");
 
 	let v = u16::from_be_bytes(short_bytes.try_into().unwrap());
@@ -149,13 +158,13 @@ fn write_packet(id: i32, data: &[u8]) -> Vec<u8> {
 	let data_len = data.len();
 
 	let packet_length = packet_id_len + data_len;
-	tracing::debug!(packet_len=packet_length, "packet length (no packet length field included)");
+	tracing::debug!(packet_length, "packet length (no packet length field included)");
 
-	let packet_length_len = varint_len((packet_id_len + data_len).try_into().expect("len is bigger than i32::MAX"));
+	let packet_length_len = varint_len(packet_length.try_into().expect("len is bigger than i32::MAX"));
 
 	let total_packet_length = packet_length_len + packet_length;
-	tracing::debug!(total_len=total_packet_length, "allocating buffer for packet");
-	let mut output = Vec::with_capacity((packet_length_len + packet_length) as usize);
+	tracing::debug!(total_packet_length, "allocating buffer for packet");
+	let mut output = Vec::with_capacity(total_packet_length);
 
 	write_varint(&mut output, packet_length.try_into().expect("Packet length bigger than i32::MAX"));
 	write_varint(&mut output, id);
@@ -174,15 +183,15 @@ fn read_packet<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], (i32, &'n [u8])> {
 
 	assert!(packet_length > 0);
 
-	let packet_length: usize = packet_length as usize;
-	tracing::debug!(len=packet_length, "packet length");
+	let packet_length = packet_length as usize;
+	tracing::debug!(packet_length, "packet length");
 
 	let (input, packet_id) = read_varint(input)?;
 
 	let packet_id_len = varint_len(packet_id);
 
-	let data_len = packet_length - packet_id_len as usize;
-	tracing::debug!(len=data_len, "data length");
+	let data_len = packet_length - packet_id_len;
+	tracing::debug!(data_len, "data length");
 
 	let (input, data) = take(data_len)(input)?;
 
@@ -197,6 +206,7 @@ pub fn server_list_ping(server_host: &str, server_port: u16) -> Vec<u8> {
 	let protocol_version = 764;
 	let next_state = 1;
 
+	// 2 is for the length of a short
 	let data_len = varint_len(protocol_version) + str_len(server_host) + 2 + varint_len(next_state);
 	tracing::debug!(data_len, "server list ping data size calculated");
 
@@ -302,16 +312,16 @@ mod test {
 	#[test]
 	fn test_varint_len() {
 		let test_vectors = [
-			(1, 1usize),
-			(128, 2usize),
-			(16384, 3usize),
-			(2097152, 4usize),
-			(268435456, 5usize),
-			(-1, 5usize),
-			(-128, 5usize),
-			(-16384, 5usize),
-			(-2097152, 5usize),
-			(-268435456, 5usize),
+			(1, 1_usize),
+			(128, 2_usize),
+			(16384, 3_usize),
+			(2097152, 4_usize),
+			(268435456, 5_usize),
+			(-1, 5_usize),
+			(-128, 5_usize),
+			(-16384, 5_usize),
+			(-2097152, 5_usize),
+			(-268435456, 5_usize),
 		];
 
 		for (v, r) in test_vectors {
