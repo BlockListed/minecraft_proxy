@@ -37,7 +37,14 @@ fn write_varint(output: &mut Vec<u8>, v: i32) {
 }
 
 fn read_varint<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], i32> {
-	let (input, until_stop) = take_till(|v| v & VARINT_CONTINUE_BIT == 1)(input)?;
+	let empty: &[u8] = &[];
+	let (input, until_stop) = match take_till(|v| v & VARINT_CONTINUE_BIT == 1)(input) {
+		Ok(d) => d,
+		Err(e) => match e {
+			nom::Err::Incomplete(_) => (input, empty),
+			_ => return Err(e),
+		}
+	};
 	let (input, stop_byte) = take::<_, &[u8], ()>(1usize)(input).unwrap();
 
 	assert!(until_stop.len() + stop_byte.len() <= 5, "Varints max out at 5 bytes");
@@ -86,6 +93,8 @@ fn write_string(output: &mut Vec<u8>, v: &str, max_len: u16) {
 
 	let len = v.len();
 	let data = v.as_bytes();
+
+	println!("Serialising string {data:?}");
 
 	write_varint(output, len as i32);
 	output.extend(data);
@@ -136,14 +145,14 @@ fn read_packet<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], (i32, &'n [u8])> {
 	assert!(packet_length > 0);
 
 	let packet_length: usize = packet_length as usize;
-	// Add some tracing for reading packet of length here
+	println!("Deserializing packet of length {packet_length}");
 
-	let (input, packet_id) = read_varint(input).unwrap();
+	let (input, packet_id) = read_varint(input)?;
 
 	let packet_id_len = varint_len(packet_id);
 
 	let data_len = packet_length - packet_id_len as usize;
-	// Add some tracing for reading data of length here
+	println!("Deserializing packet with data of length {data_len}");
 
 	let (input, data) = take(data_len)(input)?;
 
@@ -180,7 +189,10 @@ pub fn parse_status_response(buf: &[u8]) -> Option<(usize, StatusResponse)> {
 	let (input, (packet_id, data)) = match read_packet(buf) {
 		Ok(d) => d,
 		Err(e) => match e {
-			nom::Err::Incomplete(_) => return None,
+			nom::Err::Incomplete(_) => {
+				println!("Incomplete data packet header {buf:?}");
+				return None;
+			},
 			_ => Err(e).unwrap(),
 		}
 	};
@@ -190,7 +202,10 @@ pub fn parse_status_response(buf: &[u8]) -> Option<(usize, StatusResponse)> {
 	let (_, json_response) = match read_string(data) {
 		Ok(d) => d,
 		Err(e) => match e {
-			nom::Err::Incomplete(_) => return None,
+			nom::Err::Incomplete(_) => {
+				println!("Incomplete data json string {buf:?}");
+				return None;
+			},
 			_ => Err(e).unwrap(),
 		}
 	};

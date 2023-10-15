@@ -52,7 +52,12 @@ pub async fn ping(addr: &str) -> bool {
 	let mut resp_buffer = vec![0u8; 20000];
 
 	loop {
+		println!("Waiting for response from server.");
 		let read = socket.read(&mut resp_buffer).await.unwrap();
+
+		if read == 0 {
+			panic!("Connection closed");
+		}
 
 		if let Some(status) = parsing::parse_status_response(&resp_buffer[..read]) {
 			println!("{:?}", status.1);
