@@ -59,6 +59,9 @@ pub async fn ping(addr: SocketAddr) -> Option<parsing::JsonStatusResponse> {
 		match parsing::parse_status_response(&resp_buffer[..total_read]) {
 			Ok(s) => {
 				tracing::info!(status=?s.1.json_response, "received status response");
+
+				socket.shutdown().await.unwrap();
+
 				return Some(s.1.json_response)
 			}
 			Err(ParseError::Incomplete) => (),
