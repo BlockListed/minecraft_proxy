@@ -8,7 +8,7 @@ pub trait Server: Sized {
 	async fn start(&mut self) -> std::io::Result<()>;
 	async fn stop(&mut self) -> std::io::Result<()>;
 
-	fn addr(&self) -> SocketAddr;
+	fn addr(&self) -> Option<SocketAddr>;
 }
 
 pub struct DockerServer {
@@ -28,17 +28,22 @@ impl DockerServer {
 #[async_trait::async_trait]
 impl Server for DockerServer {
 	async fn start(&mut self) -> std::io::Result<()> {
+		self.docker.start_container::<&'static str>(&self.container_name, None).await.unwrap();
+
 		let networks = self.docker.inspect_container(&self.container_name, None).await.unwrap().network_settings.unwrap().networks.unwrap();	
 
 		let ip_addr = if let Some(bridge) = networks.get("bridge") {
-			Ipv4Addr::from_str(bridge.ip_address.as_ref().unwrap()).unwrap()
+			let ip = bridge.ip_address.as_ref().unwrap();
+			tracing::info!(ip, "using bridge ip address");
+			Ipv4Addr::from_str(ip).unwrap()
 		} else {
-			Ipv4Addr::from_str(&networks.into_iter().next().unwrap().1.ip_address.unwrap()).unwrap()
+			let (name, network) = networks.into_iter().next().unwrap();
+			let ip = network.ip_address.unwrap();
+			tracing::info!(ip, network=name, "found ip address on non-default network");
+			Ipv4Addr::from_str(&ip).unwrap()
 		};
 
 		self.container_ip_addr = Some(SocketAddr::from((ip_addr, 25565)));
-
-		self.docker.start_container::<&'static str>(&self.container_name, None).await.unwrap();
 
 		Ok(())
 	}
@@ -49,7 +54,7 @@ impl Server for DockerServer {
 		Ok(())
 	}
 
-	fn addr(&self) -> SocketAddr {
-		self.container_ip_addr.unwrap()
+	fn addr(&self) -> Option<SocketAddr> {
+		self.container_ip_addr
 	}
 }
