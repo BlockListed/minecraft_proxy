@@ -6,77 +6,79 @@ use tokio::net::TcpStream;
 use tokio::time::timeout;
 use tokio::time::Duration;
 
+use tokio_retry::strategy::{jitter, FixedInterval};
 use tokio_retry::Retry;
-use tokio_retry::strategy::{FixedInterval, jitter};
 
 use crate::protocol::parsing::ParseError;
 
 mod parsing;
 
 pub async fn ping(addr: SocketAddr) -> Option<parsing::JsonStatusResponse> {
-	let host = addr.ip().to_string();
+    let host = addr.ip().to_string();
 
-	let port = addr.port();
+    let port = addr.port();
 
-	let mut socket = match timeout(Duration::from_secs(1), TcpStream::connect(addr)).await.ok() {
-		Some(Ok(d)) => {
-			tracing::info!(%addr, "successfully connected");
-			d
-		}
-		Some(Err(e)) => {
-			tracing::warn!(%addr, %e, "error while connecting to host");
-			return None;
-		}
-		None => {
-			tracing::warn!(%addr, "timeout while connecting to host");
-			return None;
-		}
-	};
+    let mut socket = match timeout(Duration::from_secs(1), TcpStream::connect(addr))
+        .await
+        .ok()
+    {
+        Some(Ok(d)) => {
+            tracing::info!(%addr, "successfully connected");
+            d
+        }
+        Some(Err(e)) => {
+            tracing::warn!(%addr, %e, "error while connecting to host");
+            return None;
+        }
+        None => {
+            tracing::warn!(%addr, "timeout while connecting to host");
+            return None;
+        }
+    };
 
-	let server_list_ping = parsing::server_list_ping(&host, port);
-	tracing::trace!(data=?server_list_ping, "sending server list ping status change");
-	socket.write_all(&server_list_ping).await.unwrap();
+    let server_list_ping = parsing::server_list_ping(&host, port);
+    tracing::trace!(data=?server_list_ping, "sending server list ping status change");
+    socket.write_all(&server_list_ping).await.unwrap();
 
-	let status_request = parsing::status_request();
-	tracing::trace!(data=?status_request, "sending status request");
-	socket.write_all(&status_request).await.unwrap();
+    let status_request = parsing::status_request();
+    tracing::trace!(data=?status_request, "sending status request");
+    socket.write_all(&status_request).await.unwrap();
 
-	let mut resp_buffer = vec![0u8; 20000];
+    let mut resp_buffer = vec![0u8; 20000];
 
-	let mut total_read = 0;
+    let mut total_read = 0;
 
-	loop {
-		tracing::info!("waiting for response from server");
-		let read = socket.read(&mut resp_buffer).await.unwrap();
+    loop {
+        tracing::info!("waiting for response from server");
+        let read = socket.read(&mut resp_buffer).await.unwrap();
 
-		if read == 0 {
-			tracing::info!("connection closed");
-			return None;
-		}
+        if read == 0 {
+            tracing::info!("connection closed");
+            return None;
+        }
 
-		total_read += read;
+        total_read += read;
 
-		match parsing::parse_status_response(&resp_buffer[..total_read]) {
-			Ok(s) => {
-				tracing::info!(status=?s.1.json_response, "received status response");
+        match parsing::parse_status_response(&resp_buffer[..total_read]) {
+            Ok(s) => {
+                tracing::info!(status=?s.1.json_response, "received status response");
 
-				socket.shutdown().await.unwrap();
+                socket.shutdown().await.unwrap();
 
-				return Some(s.1.json_response)
-			}
-			Err(ParseError::Incomplete) => (),
-			Err(e) => {
-				Err(e).unwrap()
-			}
-		}
-	}
+                return Some(s.1.json_response);
+            }
+            Err(ParseError::Incomplete) => (),
+            Err(e) => panic!("{:?}", e),
+        }
+    }
 }
 
 pub async fn retry_ping(addr: SocketAddr) -> Option<parsing::JsonStatusResponse> {
-	let strategy = FixedInterval::from_millis(250)
-		.map(jitter);
+    let strategy = FixedInterval::from_millis(250).map(jitter);
 
-	Retry::spawn(strategy, || async {
-		ping(addr).await.ok_or("couldn't contact server")
-	}).await.ok()
+    Retry::spawn(strategy, || async {
+        ping(addr).await.ok_or("couldn't contact server")
+    })
+    .await
+    .ok()
 }

@@ -1,21 +1,23 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use protocol::{retry_ping, ping};
-use tokio::net::{TcpListener, TcpStream};
+use protocol::{ping, retry_ping};
 use tokio::io::copy_bidirectional;
+use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 
 mod manager;
 mod protocol;
 mod server;
 
-use server::Server;
 use server::docker::DockerServer;
+use server::Server;
 
 fn setup_logger() {
     tracing_subscriber::FmtSubscriber::builder()
         .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
-        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+        )
         .with_file(true)
         .with_line_number(true)
         .init();
@@ -25,7 +27,9 @@ fn setup_logger() {
 async fn main() {
     setup_logger();
 
-    let listener = TcpListener::bind("127.0.0.1:2000".parse::<SocketAddr>().unwrap()).await.unwrap();
+    let listener = TcpListener::bind("127.0.0.1:2000".parse::<SocketAddr>().unwrap())
+        .await
+        .unwrap();
 
     let server = Arc::new(Mutex::new(DockerServer::new("mc")));
 
