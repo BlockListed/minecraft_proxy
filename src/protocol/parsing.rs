@@ -53,7 +53,7 @@ fn read_varint<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], i32> {
 	let mut position = 0usize;
 
 	for i in until_stop.into_iter().chain(stop_byte.into_iter()).copied() {
-		output |= (i as u32) << position;
+		output |= ((i & VARINT_SEGMENT_VALUE_MASK) as u32) << position;
 		position += 7;
 	}
 
@@ -161,7 +161,7 @@ fn read_packet<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], (i32, &'n [u8])> {
 
 pub fn server_list_ping(server_host: &str, server_port: u16) -> Vec<u8> {
 	let packet_id = 0x00;
-	let protocol_version = -1;
+	let protocol_version = 764;
 	let next_state = 1;
 
 	let data_len = varint_len(protocol_version) + str_len(server_host) + 2 + varint_len(next_state);
@@ -177,6 +177,10 @@ pub fn server_list_ping(server_host: &str, server_port: u16) -> Vec<u8> {
 }
 
 pub fn status_request() -> Vec<u8> {
+	write_packet(0x00, &[])
+}
+
+pub fn ping_request() -> Vec<u8> {
 	write_packet(0x00, &[])
 }
 
@@ -217,7 +221,7 @@ pub fn parse_status_response(buf: &[u8]) -> Option<(usize, StatusResponse)> {
 
 #[cfg(test)]
 mod test {
-    use super::varint_len;
+    use super::{varint_len, write_varint, read_varint};
 
 	#[test]
 	fn test_varint_len() {
@@ -236,6 +240,27 @@ mod test {
 
 		for (v, r) in test_vectors {
 			assert_eq!(varint_len(v), r);
+		}
+	}
+
+	#[test]
+	fn test_var_parse_serialize() {
+		let test_vectors = [
+			764,
+			-1,
+			80,
+			25565,
+			1,
+		];
+
+		for i in test_vectors {
+			let mut output = Vec::with_capacity(10);
+
+			write_varint(&mut output, i);
+
+			let (_, r) = read_varint(&output).unwrap();
+
+			assert_eq!(i, r);
 		}
 	}
 }
