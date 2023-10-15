@@ -1,11 +1,15 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use protocol::{retry_ping, ping};
-use server::{Server, DockerServer};
-use tokio::{net::{TcpListener, TcpStream}, io::copy_bidirectional, sync::Mutex};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::io::copy_bidirectional;
+use tokio::sync::Mutex;
 
 mod protocol;
 mod server;
+
+use server::Server;
+use server::docker::DockerServer;
 
 fn setup_logger() {
     tracing_subscriber::FmtSubscriber::builder()
