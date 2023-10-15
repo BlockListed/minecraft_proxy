@@ -1,6 +1,6 @@
 use std::mem;
 
-use nom::{bytes::streaming::{take_while_m_n, take}, error::ParseError};
+use nom::{bytes::streaming::{take_while_m_n, take, take_until, take_till}, error::ParseError};
 // This should implement a server list ping,
 // to error out, if the server doesn't start up.
 
@@ -37,13 +37,10 @@ fn write_varint(output: &mut Vec<u8>, v: i32) {
 }
 
 fn read_varint<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], i32> {
-	let (input, until_stop) = take_while_m_n::<_, &[u8], nom::error::Error<&[u8]>>(1, 4, |v| v & VARINT_CONTINUE_BIT == 1)(input)?;
+	let (input, until_stop) = take_till(|v| v & VARINT_CONTINUE_BIT == 1)(input)?;
 	let (input, stop_byte) = take::<_, &[u8], ()>(1usize)(input).unwrap();
 
-	if stop_byte[0] & VARINT_CONTINUE_BIT != 0 {
-		// Tracing about varint too large
-		return nom::IResult::Err(nom::Err::Failure(nom::error::Error::from_error_kind(until_stop, nom::error::ErrorKind::TooLarge)));
-	}
+	assert!(until_stop.len() + stop_byte.len() <= 5, "Varints max out at 5 bytes");
 
 	let mut output: u32 = 0;
 	let mut position = 0usize;
