@@ -10,14 +10,14 @@ const VARINT_CONTINUE_BIT: u8 = 1 << 7;
 fn write_varint(output: &mut Vec<u8>, v: i32) {
 	let mut bits: u32 = unsafe { mem::transmute::<_, u32>(v) };
 
-	println!("Serialising {bits:032b}");
+	let span = tracing::debug_span!("Serializing varint", v, v_bits=format!("{v:032b}"));
+	let _enter = span.enter();
 
 	if bits == 0 {
 		output.push(0);
 		return;
 	}
 
-	println!("Starting serialising");
 	while bits > 0 {
 		let value = (bits & VARINT_SEGMENT_VALUE_MASK as u32) as u8;
 
@@ -25,39 +25,40 @@ fn write_varint(output: &mut Vec<u8>, v: i32) {
 
 		if bits > 0 {
 			let byte = value | VARINT_CONTINUE_BIT;
-			println!("Serialising {byte:08b}");
+			tracing::debug!(bits=format!("{byte:032b}"), "Serializing non-stop byte");
 			output.push(byte);
 		} else {
 			let byte = value;
-			println!("Serialising {byte:08b}");
+			tracing::debug!(bits=format!("{byte:032b}"), "Serializing stop byte");
 			output.push(byte);
 			break;
 		}
 
 	}
-	println!("Stopping serialising");
 }
 
 fn read_varint<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], i32> {
 	let (input, until_stop) = take_till(|v| v & VARINT_CONTINUE_BIT == 0)(input)?;
 	let (input, stop_byte) = take::<_, &[u8], nom::error::Error<&[u8]>>(1usize)(input)?;
 
-	assert!(until_stop.len() + stop_byte.len() <= 5, "Varints max out at 5 bytes");
+	let len = until_stop.len() + stop_byte.len();
 
-	println!("Deserializing varint of length {}.", until_stop.len() + stop_byte.len(), );
+	let span = tracing::debug_span!("Deserializing varint", len);
+	let _guard = span.enter();
+
+	assert!(len <= 5, "Varints max out at 5 bytes");
 
 	let mut output: u32 = 0;
 	let mut position = 0usize;
 
 	for i in until_stop.into_iter().chain(stop_byte.into_iter()).copied() {
 		let var_value = ((i & VARINT_SEGMENT_VALUE_MASK) as u32) << position;
-		println!("Adding {var_value} to output");
 		output |= var_value;
+		tracing::debug!(add=var_value, output, "Adding varint to output");
 		position += 7;
 	}
 
 	let output_int: i32 = unsafe { mem::transmute(output) };
-	println!("Deserialized {output_int}");
 
 	nom::IResult::Ok((input, output_int))
 }
@@ -78,6 +79,7 @@ fn write_short(output: &mut Vec<u8>, v: u16) {
 	output.extend(v.to_be_bytes())
 }
 
+#[allow(dead_code)]
 fn read_short<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], u16> {
 	let (input, short_bytes) = take(2usize)(input)?;
 
@@ -85,14 +87,17 @@ fn read_short<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], u16> {
 }
 
 fn write_string(output: &mut Vec<u8>, v: &str, max_len: u16) {
+	let span = tracing::debug_span!("serializing string", v=?v.as_bytes());
+	let _enter = span.enter();
+
 	assert!(v.len() < max_len as usize);
 
 	let len = v.len();
 	let data = v.as_bytes();
 
-	println!("Serialising string {data:?}");
-
 	write_varint(output, len as i32);
+	tracing::debug!("serialized varint");
+
 	output.extend(data);
 }
 
@@ -136,19 +141,22 @@ fn write_packet(id: i32, data: &[u8]) -> Vec<u8> {
 }
 
 fn read_packet<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], (i32, &'n [u8])> {
+	let span = tracing::debug_span!("deserializing packet");
+	let _enter = span.enter();
+
 	let (input, packet_length) = read_varint(input)?;
 
 	assert!(packet_length > 0);
 
 	let packet_length: usize = packet_length as usize;
-	println!("Deserializing packet of length {packet_length}");
+	tracing::debug!(len=packet_length, "packet length");
 
 	let (input, packet_id) = read_varint(input)?;
 
 	let packet_id_len = varint_len(packet_id);
 
 	let data_len = packet_length - packet_id_len as usize;
-	println!("Deserializing packet with data of length {data_len}");
+	tracing::debug!(len=data_len, "data length");
 
 	let (input, data) = take(data_len)(input)?;
 
@@ -176,6 +184,7 @@ pub fn status_request() -> Vec<u8> {
 	write_packet(0x00, &[])
 }
 
+#[allow(dead_code)]
 pub fn ping_request() -> Vec<u8> {
 	write_packet(0x00, &[])
 }
@@ -199,7 +208,7 @@ impl<'n> From<nom::Err<nom::error::Error<&'n [u8]>>> for ParseError<'n> {
 
 #[derive(Debug)]
 pub struct StatusResponse {
-	json_response: String,
+	pub json_response: String,
 }
 
 pub fn parse_status_response(buf: &[u8]) -> Result<(usize, StatusResponse), ParseError> {
