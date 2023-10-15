@@ -1,6 +1,6 @@
 use std::mem;
 
-use nom::{bytes::streaming::{take_while_m_n, take, take_until, take_till}, error::ParseError};
+use nom::bytes::streaming::{take, take_till};
 // This should implement a server list ping,
 // to error out, if the server doesn't start up.
 
@@ -40,7 +40,7 @@ fn write_varint(output: &mut Vec<u8>, v: i32) {
 
 fn read_varint<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], i32> {
 	let (input, until_stop) = take_till(|v| v & VARINT_CONTINUE_BIT == 0)(input)?;
-	let (input, stop_byte) = take::<_, &[u8], ()>(1usize)(input).unwrap();
+	let (input, stop_byte) = take::<_, &[u8], nom::error::Error<&[u8]>>(1usize)(input)?;
 
 	assert!(until_stop.len() + stop_byte.len() <= 5, "Varints max out at 5 bytes");
 
@@ -81,10 +81,7 @@ fn write_short(output: &mut Vec<u8>, v: u16) {
 fn read_short<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], u16> {
 	let (input, short_bytes) = take(2usize)(input)?;
 
-	let mut short_bits = [0u8; 2];
-	short_bits.copy_from_slice(short_bytes);
-
-	return nom::IResult::Ok((input, u16::from_be_bytes(short_bits)))
+	return nom::IResult::Ok((input, u16::from_be_bytes(short_bytes.try_into().unwrap())))
 }
 
 fn write_string(output: &mut Vec<u8>, v: &str, max_len: u16) {
@@ -100,7 +97,7 @@ fn write_string(output: &mut Vec<u8>, v: &str, max_len: u16) {
 }
 
 fn read_string<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], &'n str> {
-	let (input, len) = read_varint(input).unwrap();
+	let (input, len) = read_varint(input)?;
 	assert!(len > 0);
 	let len = len as usize;
 
@@ -114,7 +111,7 @@ fn read_string<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], &'n str> {
 
 fn str_len(v: &str) -> usize {
 	let len = v.len();
-	let length_len = varint_len(len.try_into().unwrap());
+	let length_len = varint_len(len.try_into().expect("len is bigger than i32::MAX"));
 
 	len + length_len
 }
@@ -125,11 +122,11 @@ fn write_packet(id: i32, data: &[u8]) -> Vec<u8> {
 
 	let packet_length = packet_id_len + data_len;
 
-	let packet_length_len = varint_len((packet_id_len + data_len).try_into().unwrap());
+	let packet_length_len = varint_len((packet_id_len + data_len).try_into().expect("len is bigger than i32::MAX"));
 
 	let mut output = Vec::with_capacity((packet_length_len + packet_length) as usize);
 
-	write_varint(&mut output, packet_length.try_into().unwrap());
+	write_varint(&mut output, packet_length.try_into().expect("Packet length bigger than i32::MAX"));
 	write_varint(&mut output, id);
 	output.extend(data);
 
@@ -183,39 +180,40 @@ pub fn ping_request() -> Vec<u8> {
 	write_packet(0x00, &[])
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum ParseError<'n> {
+	#[error("Input is incomplete")]
+	Incomplete,
+	#[error("Error while parsing")]
+	Parsing(nom::Err<nom::error::Error<&'n [u8]>>)
+}
+
+impl<'n> From<nom::Err<nom::error::Error<&'n [u8]>>> for ParseError<'n> {
+	fn from(e: nom::Err<nom::error::Error<&'n [u8]>>) -> Self {
+		match e {
+			nom::Err::Incomplete(_) => ParseError::Incomplete,
+			_ => ParseError::Parsing(e),
+		}
+	}
+}
+
 #[derive(Debug)]
 pub struct StatusResponse {
 	json_response: String,
 }
 
-pub fn parse_status_response(buf: &[u8]) -> Option<(usize, StatusResponse)> {
-	let (input, (packet_id, data)) = match read_packet(buf) {
-		Ok(d) => d,
-		Err(e) => match e {
-			nom::Err::Incomplete(_) => {
-				println!("Incomplete data packet header {buf:?}");
-				return None;
-			},
-			_ => Err(e).unwrap(),
-		}
-	};
+pub fn parse_status_response(buf: &[u8]) -> Result<(usize, StatusResponse), ParseError> {
+	let (input, (packet_id, data)) = read_packet(buf)?;
+
+	let consumed = buf.len() - input.len();
 
 	assert_eq!(packet_id, 0x00);
 
-	let (_, json_response) = match read_string(data) {
-		Ok(d) => d,
-		Err(e) => match e {
-			nom::Err::Incomplete(_) => {
-				println!("Incomplete data json string {buf:?}");
-				return None;
-			},
-			_ => Err(e).unwrap(),
-		}
-	};
-	
+	let (_, json_response) = read_string(data)?;
+
 	let json_response = json_response.to_owned();
 
-	return Some((buf.len() - input.len(), StatusResponse { json_response }))
+	return Ok((consumed, StatusResponse { json_response }))
 }
 
 #[cfg(test)]

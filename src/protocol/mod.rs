@@ -6,6 +6,8 @@ use tokio::net::TcpStream;
 use tokio::time::timeout;
 use tokio::time::Duration;
 
+use crate::protocol::parsing::ParseError;
+
 mod parsing;
 
 pub async fn ping(addr: &str) -> bool {
@@ -51,6 +53,8 @@ pub async fn ping(addr: &str) -> bool {
 
 	let mut resp_buffer = vec![0u8; 20000];
 
+	let mut total_read = 0;
+
 	loop {
 		println!("Waiting for response from server.");
 		let read = socket.read(&mut resp_buffer).await.unwrap();
@@ -59,9 +63,17 @@ pub async fn ping(addr: &str) -> bool {
 			panic!("Connection closed");
 		}
 
-		if let Some(status) = parsing::parse_status_response(&resp_buffer[..read]) {
-			println!("{:?}", status.1);
-			break;
+		total_read += read;
+
+		match parsing::parse_status_response(&resp_buffer[..total_read]) {
+			Ok(s) => {
+				println!("Status: {:?}", s.1);
+				break;
+			}
+			Err(ParseError::Incomplete) => (),
+			Err(e) => {
+				Err(e).unwrap()
+			}
 		}
 	}
 
