@@ -17,13 +17,8 @@ impl DockerServer {
 
 		DockerServer { docker, container_name: container_name.to_string(), container_ip_addr: None }
 	}
-}
 
-#[async_trait::async_trait]
-impl Server for DockerServer {
-	async fn start(&mut self) -> std::io::Result<()> {
-		self.docker.start_container::<&'static str>(&self.container_name, None).await.unwrap();
-
+	pub async fn get_socket_addr(&self) -> SocketAddr {
 		let networks = self.docker.inspect_container(&self.container_name, None).await.unwrap().network_settings.unwrap().networks.unwrap();	
 
 		let ip_addr = if let Some(bridge) = networks.get("bridge") {
@@ -37,7 +32,18 @@ impl Server for DockerServer {
 			Ipv4Addr::from_str(&ip).unwrap()
 		};
 
-		self.container_ip_addr = Some(SocketAddr::from((ip_addr, 25565)));
+		SocketAddr::from((ip_addr, 25565))
+	}
+}
+
+#[async_trait::async_trait]
+impl Server for DockerServer {
+	async fn start(&mut self) -> std::io::Result<()> {
+		self.docker.start_container::<&'static str>(&self.container_name, None).await.unwrap();
+
+		if self.container_ip_addr.is_none() {
+			self.container_ip_addr = Some(self.get_socket_addr().await);
+		}
 
 		Ok(())
 	}

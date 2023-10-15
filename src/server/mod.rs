@@ -1,7 +1,4 @@
-use std::net::{Ipv4Addr, SocketAddr};
-use std::str::FromStr;
-
-use bollard::Docker;
+use std::net::SocketAddr;
 
 pub mod docker;
 
