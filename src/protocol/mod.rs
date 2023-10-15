@@ -10,7 +10,7 @@ use crate::protocol::parsing::ParseError;
 
 mod parsing;
 
-pub async fn ping(addr: &str) -> bool {
+pub async fn ping(addr: &str) -> Option<parsing::JsonStatusResponse> {
 	let socket_addrs = addr.to_socket_addrs().unwrap();
 
 	let host = if let Some(e) = addr.rfind(":") {
@@ -40,7 +40,7 @@ pub async fn ping(addr: &str) -> bool {
 	} 
 
 	let Some((mut socket, port)) = socket_port else {
-		return false;
+		return None;
 	};
 
 	let server_list_ping = parsing::server_list_ping(host, port);
@@ -68,7 +68,7 @@ pub async fn ping(addr: &str) -> bool {
 		match parsing::parse_status_response(&resp_buffer[..total_read]) {
 			Ok(s) => {
 				tracing::info!(status=?s.1.json_response, "received status response");
-				break;
+				return Some(s.1.json_response)
 			}
 			Err(ParseError::Incomplete) => (),
 			Err(e) => {
@@ -76,6 +76,4 @@ pub async fn ping(addr: &str) -> bool {
 			}
 		}
 	}
-
-	return true;
 }
