@@ -1,7 +1,7 @@
 use std::mem;
 
 use nom::bytes::streaming::{take, take_till};
-use tracing::debug_span;
+use serde::Deserialize;
 // This should implement a server list ping,
 // to error out, if the server doesn't start up.
 
@@ -79,7 +79,7 @@ fn varint_len(v: i32) -> usize {
 }
 
 fn write_short(output: &mut Vec<u8>, v: u16) {
-	let span = debug_span!("serializing short", v);
+	let span = tracing::debug_span!("serializing short", v);
 	let _enter = span.enter();
 
 	let bytes = v.to_be_bytes();
@@ -89,7 +89,7 @@ fn write_short(output: &mut Vec<u8>, v: u16) {
 
 #[allow(dead_code)]
 fn read_short<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], u16> {
-	let span = debug_span!("read short");
+	let span = tracing::debug_span!("read short");
 	let _enter = span.enter();
 
 	let (input, short_bytes) = take(2usize)(input)?;
@@ -190,7 +190,7 @@ fn read_packet<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], (i32, &'n [u8])> {
 }
 
 pub fn server_list_ping(server_host: &str, server_port: u16) -> Vec<u8> {
-	let span = debug_span!("server list ping", server_host, server_port);
+	let span = tracing::debug_span!("server list ping", server_host, server_port);
 	let _enter = span.enter();
 
 	let packet_id = 0x00;
@@ -237,8 +237,45 @@ impl<'n> From<nom::Err<nom::error::Error<&'n [u8]>>> for ParseError<'n> {
 }
 
 #[derive(Debug)]
-pub struct StatusResponse {
-	pub json_response: String,
+pub struct StatusResponse<'a> {
+	pub json_response: JsonStatusResponse<'a>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct JsonStatusResponse<'a> {
+	pub version: JsonVersion<'a>,
+	pub players: JsonPlayers<'a>,
+	pub description: JsonDescription<'a>,
+	pub favicon: Option<&'a str>,
+	#[serde(rename = "enforcesSecureChat", default)]
+	pub enforces_secure_chat: bool,
+	#[serde(rename = "previewsChat", default)]
+	pub previews_chat: bool,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct JsonVersion<'a> {
+	pub name: &'a str,
+	pub protocol: i32,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct JsonPlayers<'a> {
+	pub max: u32,
+	pub online: u32,
+	#[serde(borrow)]
+	pub sample: Option<Vec<JsonPlayer<'a>>>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct JsonPlayer<'a> {
+	pub name: &'a str,
+	pub id: &'a str,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct JsonDescription<'a> {
+	pub text: &'a str,
 }
 
 pub fn parse_status_response(buf: &[u8]) -> Result<(usize, StatusResponse), ParseError> {
@@ -254,7 +291,7 @@ pub fn parse_status_response(buf: &[u8]) -> Result<(usize, StatusResponse), Pars
 	let (_, json_response) = read_string(data)?;
 	tracing::debug!("got json response (should probably be deserialized)");
 
-	let json_response = json_response.to_owned();
+	let json_response: JsonStatusResponse = serde_json::from_str(json_response).unwrap();
 
 	return Ok((consumed, StatusResponse { json_response }))
 }
