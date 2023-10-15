@@ -5,8 +5,16 @@ use tokio::{net::{TcpListener, TcpStream}, io::copy_bidirectional};
 
 mod protocol;
 
+fn setup_logger() {
+    tracing_subscriber::FmtSubscriber::builder()
+        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .init();
+}
+
 #[tokio::main]
 async fn main() {
+    setup_logger();
+
     ping("localhost:25565").await;
 
     return;
