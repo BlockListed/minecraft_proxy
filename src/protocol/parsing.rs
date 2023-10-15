@@ -185,35 +185,26 @@ pub struct StatusResponse {
 	json_response: String,
 }
 
-pub enum Parse<R> {
-	Done(usize, R),
-	Skip(usize),
-	MoreData,
-}
-
-pub fn parse_status_response(buf: &[u8]) -> Parse<StatusResponse> {
+pub fn parse_status_response(buf: &[u8]) -> Option<(usize, StatusResponse)> {
 	let (input, (packet_id, data)) = match read_packet(buf) {
 		Ok(d) => d,
 		Err(e) => match e {
 			nom::Err::Incomplete(_) => {
 				println!("Incomplete data packet header {buf:?}");
-				return Parse::MoreData;
+				return None;
 			},
 			_ => Err(e).unwrap(),
 		}
 	};
 
-	if packet_id != 0x00 {
-		println!("Skipping because of wrong packet_id, {packet_id}");
-		return Parse::Skip(buf.len() - input.len());
-	}
+	assert_eq!(packet_id, 0x00);
 
 	let (_, json_response) = match read_string(data) {
 		Ok(d) => d,
 		Err(e) => match e {
 			nom::Err::Incomplete(_) => {
 				println!("Incomplete data json string {buf:?}");
-				return Parse::MoreData;
+				return None;
 			},
 			_ => Err(e).unwrap(),
 		}
@@ -221,7 +212,7 @@ pub fn parse_status_response(buf: &[u8]) -> Parse<StatusResponse> {
 	
 	let json_response = json_response.to_owned();
 
-	return Parse::Done(buf.len() - input.len(), StatusResponse { json_response })
+	return Some((buf.len() - input.len(), StatusResponse { json_response }))
 }
 
 #[cfg(test)]

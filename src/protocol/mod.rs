@@ -42,16 +42,15 @@ pub async fn ping(addr: &str) -> bool {
 	};
 
 	let server_list_ping = parsing::server_list_ping(host, port);
-	println!("Sending handshake status change {:?}", server_list_ping);
+	println!("{:?}", server_list_ping);
 	socket.write_all(&server_list_ping).await.unwrap();
 
 	let status_request = parsing::status_request();
-	println!("Sending status request {:?}", status_request);
+	println!("{:?}", status_request);
 	socket.write_all(&status_request).await.unwrap();
 
 	let mut resp_buffer = vec![0u8; 20000];
 
-	let mut read_total: usize = 0;
 	loop {
 		println!("Waiting for response from server.");
 		let read = socket.read(&mut resp_buffer).await.unwrap();
@@ -60,21 +59,10 @@ pub async fn ping(addr: &str) -> bool {
 			panic!("Connection closed");
 		}
 
-		read_total += read;
-
-		match parsing::parse_status_response(&resp_buffer[..read_total]) {
-			parsing::Parse::Done(_, status) => {
-				println!("{status:?}");
-				break;
-			}
-			parsing::Parse::Skip(skip) => {
-				println!("Parser wants to skip {skip} bytes");
-				resp_buffer.copy_within(skip.., 0);
-				read_total -= skip;
-			}
-			parsing::Parse::MoreData => {
-				println!("Parser wants more data");
-			}
+		println!("Read {read} bytes of data: {resp_buffer:?}");
+		if let Some(status) = parsing::parse_status_response(&resp_buffer[..read]) {
+			println!("{:?}", status.1);
+			break;
 		}
 	}
 
