@@ -25,11 +25,11 @@ fn write_varint(output: &mut Vec<u8>, v: i32) {
 
 		if bits > 0 {
 			let byte = value | VARINT_CONTINUE_BIT;
-			tracing::debug!(bits=format!("{byte:032b}"), "Serializing non-stop byte");
+			tracing::debug!(bits=format!("{byte:08b}"), "Serializing non-stop byte");
 			output.push(byte);
 		} else {
 			let byte = value;
-			tracing::debug!(bits=format!("{byte:032b}"), "Serializing stop byte");
+			tracing::debug!(bits=format!("{byte:08b}"), "Serializing stop byte");
 			output.push(byte);
 			break;
 		}

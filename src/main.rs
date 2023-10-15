@@ -7,7 +7,10 @@ mod protocol;
 
 fn setup_logger() {
     tracing_subscriber::FmtSubscriber::builder()
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
         .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with_file(true)
+        .with_line_number(true)
         .init();
 }
 

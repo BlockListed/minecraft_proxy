@@ -24,7 +24,7 @@ pub async fn ping(addr: &str) -> bool {
 	for addr in socket_addrs {
 		match timeout(Duration::from_secs(1), TcpStream::connect(addr)).await.ok() {
 			Some(Ok(d)) => {
-				tracing::info!(%addr, "succesfully connected");
+				tracing::info!(%addr, "successfully connected");
 				if socket_port.is_none() {
 					socket_port = Some((d, addr.port()));
 					break;
