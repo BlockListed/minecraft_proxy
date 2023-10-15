@@ -63,7 +63,8 @@ pub async fn ping(addr: &str) -> Option<parsing::JsonStatusResponse> {
 		let read = socket.read(&mut resp_buffer).await.unwrap();
 
 		if read == 0 {
-			panic!("Connection closed");
+			tracing::info!("connection closed");
+			return None;
 		}
 
 		total_read += read;
