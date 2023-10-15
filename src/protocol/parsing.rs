@@ -237,16 +237,16 @@ impl<'n> From<nom::Err<nom::error::Error<&'n [u8]>>> for ParseError<'n> {
 }
 
 #[derive(Debug)]
-pub struct StatusResponse<'a> {
-	pub json_response: JsonStatusResponse<'a>,
+pub struct StatusResponse {
+	pub json_response: JsonStatusResponse,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct JsonStatusResponse<'a> {
-	pub version: JsonVersion<'a>,
-	pub players: JsonPlayers<'a>,
-	pub description: JsonDescription<'a>,
-	pub favicon: Option<&'a str>,
+pub struct JsonStatusResponse {
+	pub version: JsonVersion,
+	pub players: JsonPlayers,
+	pub description: JsonDescription,
+	pub favicon: Option<String>,
 	#[serde(rename = "enforcesSecureChat", default)]
 	pub enforces_secure_chat: bool,
 	#[serde(rename = "previewsChat", default)]
@@ -254,28 +254,27 @@ pub struct JsonStatusResponse<'a> {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct JsonVersion<'a> {
-	pub name: &'a str,
+pub struct JsonVersion {
+	pub name: String,
 	pub protocol: i32,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct JsonPlayers<'a> {
+pub struct JsonPlayers {
 	pub max: u32,
 	pub online: u32,
-	#[serde(borrow)]
-	pub sample: Option<Vec<JsonPlayer<'a>>>,
+	pub sample: Option<Vec<JsonPlayer>>,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct JsonPlayer<'a> {
-	pub name: &'a str,
-	pub id: &'a str,
+pub struct JsonPlayer {
+	pub name: String,
+	pub id: String,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct JsonDescription<'a> {
-	pub text: &'a str,
+pub struct JsonDescription {
+	pub text: String,
 }
 
 pub fn parse_status_response(buf: &[u8]) -> Result<(usize, StatusResponse), ParseError> {
