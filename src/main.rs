@@ -19,7 +19,7 @@ fn setup_logger() {
 async fn main() {
     setup_logger();
 
-    retry_ping("localhost:25565").await;
+    retry_ping(([127, 0, 0, 1], 25565).into()).await;
 
     let listener = TcpListener::bind("127.0.0.1:2000".parse::<SocketAddr>().unwrap()).await.unwrap();
 

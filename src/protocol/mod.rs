@@ -1,4 +1,4 @@
-use std::net::ToSocketAddrs;
+use std::net::SocketAddr;
 
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
@@ -13,40 +13,27 @@ use crate::protocol::parsing::ParseError;
 
 mod parsing;
 
-pub async fn ping(addr: &str) -> Option<parsing::JsonStatusResponse> {
-	let socket_addrs = addr.to_socket_addrs().unwrap();
+pub async fn ping(addr: SocketAddr) -> Option<parsing::JsonStatusResponse> {
+	let host = addr.ip().to_string();
 
-	let host = if let Some(e) = addr.rfind(":") {
-		&addr[..e]
-	} else {
-		addr
-	};
+	let port = addr.port();
 
-	let mut socket_port = None;
-
-	for addr in socket_addrs {
-		match timeout(Duration::from_secs(1), TcpStream::connect(addr)).await.ok() {
-			Some(Ok(d)) => {
-				tracing::info!(%addr, "successfully connected");
-				if socket_port.is_none() {
-					socket_port = Some((d, addr.port()));
-					break;
-				}
-			}
-			Some(Err(e)) => {
-				tracing::warn!(%addr, %e, "error while connecting to host");
-			}
-			None => {
-				tracing::warn!(%addr, "timeout while connecting to host");
-			}
+	let mut socket = match timeout(Duration::from_secs(1), TcpStream::connect(addr)).await.ok() {
+		Some(Ok(d)) => {
+			tracing::info!(%addr, "successfully connected");
+			d
 		}
-	} 
-
-	let Some((mut socket, port)) = socket_port else {
-		return None;
+		Some(Err(e)) => {
+			tracing::warn!(%addr, %e, "error while connecting to host");
+			return None;
+		}
+		None => {
+			tracing::warn!(%addr, "timeout while connecting to host");
+			return None;
+		}
 	};
 
-	let server_list_ping = parsing::server_list_ping(host, port);
+	let server_list_ping = parsing::server_list_ping(&host, port);
 	tracing::trace!(data=?server_list_ping, "sending server list ping status change");
 	socket.write_all(&server_list_ping).await.unwrap();
 
@@ -82,7 +69,7 @@ pub async fn ping(addr: &str) -> Option<parsing::JsonStatusResponse> {
 	}
 }
 
-pub async fn retry_ping(addr: &str) -> Option<parsing::JsonStatusResponse> {
+pub async fn retry_ping(addr: SocketAddr) -> Option<parsing::JsonStatusResponse> {
 	let strategy = FixedInterval::from_millis(250)
 		.map(jitter);
 
