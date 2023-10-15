@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::sync::Mutex;
+use tracing::Instrument;
 
 use crate::protocol::ping;
 use crate::server::Server;
@@ -22,11 +23,22 @@ impl<S: Server> ServerManager<S> {
 	/// Returns `true` if server should turn off.
 	pub async fn probe(&mut self) -> bool {
 		if let Some(addr) = self.server.lock().await.addr() {
-			if let Some(status) = ping(addr).await {
-				if status.players.online > 0 {
-					self.turn_of_at = Instant::now().checked_add(Duration::from_secs(1800)).unwrap();
-					return false;
+			let can_shutdown = async {
+				if let Some(status) = ping(addr).await {
+					tracing::info!("manager server health check completed");
+					if status.players.online > 0 {
+						tracing::info!(online=status.players.online, "players are on the server");
+						self.turn_of_at = Instant::now().checked_add(Duration::from_secs(1800)).unwrap();
+						return false;
+					}
+					tracing::info!("no players are on the server");
 				}
+
+				return true;
+			}.instrument(tracing::info_span!("health_check", %addr)).await;
+
+			if !can_shutdown {
+				return false;
 			}
 		}
 

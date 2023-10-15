@@ -39,6 +39,7 @@ impl DockerServer {
 #[async_trait::async_trait]
 impl Server for DockerServer {
 	async fn start(&mut self) -> std::io::Result<()> {
+		tracing::info!(container=self.container_name, "starting docker mc server");
 		self.docker.start_container::<&'static str>(&self.container_name, None).await.unwrap();
 
 		if self.container_ip_addr.is_none() {
@@ -49,6 +50,7 @@ impl Server for DockerServer {
 	}
 
 	async fn stop(&mut self) -> std::io::Result<()> {
+		tracing::info!(container=self.container_name, "stopping docker mc server");
 		self.docker.stop_container(&self.container_name, None).await.unwrap();
 
 		Ok(())
