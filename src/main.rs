@@ -4,6 +4,7 @@ use protocol::ping;
 use tokio::{net::{TcpListener, TcpStream}, io::copy_bidirectional};
 
 mod protocol;
+mod server;
 
 fn setup_logger() {
     tracing_subscriber::FmtSubscriber::builder()
@@ -20,7 +21,6 @@ async fn main() {
 
     ping("localhost:25565").await;
 
-    return;
     let listener = TcpListener::bind("127.0.0.1:2000".parse::<SocketAddr>().unwrap()).await.unwrap();
 
     loop {
