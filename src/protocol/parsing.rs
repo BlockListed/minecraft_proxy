@@ -1,6 +1,7 @@
 use std::mem;
 
 use nom::bytes::streaming::{take, take_till};
+use tracing::debug_span;
 // This should implement a server list ping,
 // to error out, if the server doesn't start up.
 
@@ -8,10 +9,10 @@ const VARINT_SEGMENT_VALUE_MASK: u8 = !( 1 << 7);
 const VARINT_CONTINUE_BIT: u8 = 1 << 7;
 
 fn write_varint(output: &mut Vec<u8>, v: i32) {
-	let mut bits: u32 = unsafe { mem::transmute::<_, u32>(v) };
-
 	let span = tracing::debug_span!("Serializing varint", v, v_bits=format!("{v:032b}"));
 	let _enter = span.enter();
+
+	let mut bits: u32 = unsafe { mem::transmute::<_, u32>(v) };
 
 	if bits == 0 {
 		output.push(0);
@@ -38,13 +39,15 @@ fn write_varint(output: &mut Vec<u8>, v: i32) {
 }
 
 fn read_varint<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], i32> {
+	let span = tracing::debug_span!("Deserializing varint");
+	let _guard = span.enter();
+
 	let (input, until_stop) = take_till(|v| v & VARINT_CONTINUE_BIT == 0)(input)?;
 	let (input, stop_byte) = take::<_, &[u8], nom::error::Error<&[u8]>>(1usize)(input)?;
 
 	let len = until_stop.len() + stop_byte.len();
 
-	let span = tracing::debug_span!("Deserializing varint", len);
-	let _guard = span.enter();
+	span.record("len", len);
 
 	assert!(len <= 5, "Varints max out at 5 bytes");
 
@@ -76,14 +79,26 @@ fn varint_len(v: i32) -> usize {
 }
 
 fn write_short(output: &mut Vec<u8>, v: u16) {
-	output.extend(v.to_be_bytes())
+	let span = debug_span!("serializing short", v);
+	let _enter = span.enter();
+
+	let bytes = v.to_be_bytes();
+	output.extend(bytes);
+	tracing::debug!(?bytes, "serialized short");
 }
 
 #[allow(dead_code)]
 fn read_short<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], u16> {
-	let (input, short_bytes) = take(2usize)(input)?;
+	let span = debug_span!("read short");
+	let _enter = span.enter();
 
-	return nom::IResult::Ok((input, u16::from_be_bytes(short_bytes.try_into().unwrap())))
+	let (input, short_bytes) = take(2usize)(input)?;
+	tracing::debug!(?short_bytes, "deserializing short");
+
+	let v = u16::from_be_bytes(short_bytes.try_into().unwrap());
+	tracing::debug!(v, "deserialized short");
+
+	return nom::IResult::Ok((input, v))
 }
 
 fn write_string(output: &mut Vec<u8>, v: &str, max_len: u16) {
@@ -102,11 +117,16 @@ fn write_string(output: &mut Vec<u8>, v: &str, max_len: u16) {
 }
 
 fn read_string<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], &'n str> {
+	let span = tracing::debug_span!("deserializing string");
+	let _enter = span.enter();
+
 	let (input, len) = read_varint(input)?;
+
+	tracing::debug!(len, "string length found");
+
 	assert!(len > 0);
 	let len = len as usize;
 
-	// Add tracing for reading string here
 	let (input, data) = take(len)(input)?;
 
 	let string = std::str::from_utf8(data).expect("String contained invalid UTF-8");
@@ -122,13 +142,19 @@ fn str_len(v: &str) -> usize {
 }
 
 fn write_packet(id: i32, data: &[u8]) -> Vec<u8> {
+	let span = tracing::debug_span!("serializing packet", id, len=data.len());
+	let _enter = span.enter();
+
 	let packet_id_len = varint_len(id);
 	let data_len = data.len();
 
 	let packet_length = packet_id_len + data_len;
+	tracing::debug!(packet_len=packet_length, "packet length (no packet length field included)");
 
 	let packet_length_len = varint_len((packet_id_len + data_len).try_into().expect("len is bigger than i32::MAX"));
 
+	let total_packet_length = packet_length_len + packet_length;
+	tracing::debug!(total_len=total_packet_length, "allocating buffer for packet");
 	let mut output = Vec::with_capacity((packet_length_len + packet_length) as usize);
 
 	write_varint(&mut output, packet_length.try_into().expect("Packet length bigger than i32::MAX"));
@@ -164,11 +190,15 @@ fn read_packet<'n>(input: &'n [u8]) -> nom::IResult<&'n [u8], (i32, &'n [u8])> {
 }
 
 pub fn server_list_ping(server_host: &str, server_port: u16) -> Vec<u8> {
+	let span = debug_span!("server list ping", server_host, server_port);
+	let _enter = span.enter();
+
 	let packet_id = 0x00;
 	let protocol_version = 764;
 	let next_state = 1;
 
 	let data_len = varint_len(protocol_version) + str_len(server_host) + 2 + varint_len(next_state);
+	tracing::debug!(data_len, "server list ping data size calculated");
 
 	let mut data = Vec::with_capacity(data_len);
 
@@ -212,6 +242,9 @@ pub struct StatusResponse {
 }
 
 pub fn parse_status_response(buf: &[u8]) -> Result<(usize, StatusResponse), ParseError> {
+	let span = tracing::debug_span!("deserializing status response");
+	let _enter = span.enter();
+
 	let (input, (packet_id, data)) = read_packet(buf)?;
 
 	let consumed = buf.len() - input.len();
@@ -219,6 +252,7 @@ pub fn parse_status_response(buf: &[u8]) -> Result<(usize, StatusResponse), Pars
 	assert_eq!(packet_id, 0x00);
 
 	let (_, json_response) = read_string(data)?;
+	tracing::debug!("got json response (should probably be deserialized)");
 
 	let json_response = json_response.to_owned();
 
