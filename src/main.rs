@@ -45,19 +45,19 @@ async fn main() {
 }
 
 async fn get_connection<S: Server>(server: &mut S) -> TcpStream {
-    if let Some(addr) = server.addr() {
-        if ping(addr).await.is_some() {
-            return TcpStream::connect(addr).await.unwrap();
+    if let Some(host) = server.addr() {
+        if ping(&host.host, host.addr).await.is_some() {
+            return TcpStream::connect(host.addr).await.unwrap();
         }
     }
 
     server.start().await.unwrap();
 
-    let addr = server.addr().unwrap();
+    let host = server.addr().unwrap();
 
-    retry_ping(addr).await.unwrap();
+    retry_ping(&host.host, host.addr).await.unwrap();
 
-    TcpStream::connect(addr).await.unwrap()
+    TcpStream::connect(host.addr).await.unwrap()
 }
 
 async fn handle_conn<S: Server>(mut conn: TcpStream, server: Arc<Mutex<S>>) {

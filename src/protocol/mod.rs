@@ -6,16 +6,14 @@ use tokio::net::TcpStream;
 use tokio::time::timeout;
 use tokio::time::Duration;
 
-use tokio_retry::strategy::{jitter, FixedInterval};
+use tokio_retry::strategy::FixedInterval;
 use tokio_retry::Retry;
 
 use crate::protocol::parsing::ParseError;
 
 mod parsing;
 
-pub async fn ping(addr: SocketAddr) -> Option<parsing::JsonStatusResponse> {
-    let host = addr.ip().to_string();
-
+pub async fn ping(host: &str, addr: SocketAddr) -> Option<parsing::JsonStatusResponse> {
     let port = addr.port();
 
     let mut socket = match timeout(Duration::from_secs(1), TcpStream::connect(addr))
@@ -36,7 +34,7 @@ pub async fn ping(addr: SocketAddr) -> Option<parsing::JsonStatusResponse> {
         }
     };
 
-    let server_list_ping = parsing::server_list_ping(&host, port);
+    let server_list_ping = parsing::server_list_ping(host, port);
     tracing::trace!(data=?server_list_ping, "sending server list ping status change");
     socket.write_all(&server_list_ping).await.unwrap();
 
@@ -73,11 +71,11 @@ pub async fn ping(addr: SocketAddr) -> Option<parsing::JsonStatusResponse> {
     }
 }
 
-pub async fn retry_ping(addr: SocketAddr) -> Option<parsing::JsonStatusResponse> {
-    let strategy = FixedInterval::from_millis(250).map(jitter);
+pub async fn retry_ping(host: &str, addr: SocketAddr) -> Option<parsing::JsonStatusResponse> {
+    let strategy = FixedInterval::from_millis(500);
 
     Retry::spawn(strategy, || async {
-        ping(addr).await.ok_or("couldn't contact server")
+        ping(host, addr).await.ok_or("couldn't contact server")
     })
     .await
     .ok()

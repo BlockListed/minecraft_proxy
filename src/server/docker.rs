@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use bollard::Docker;
 
-use super::Server;
+use super::{Server, HostData};
 
 pub struct DockerServer {
     docker: Docker,
@@ -78,7 +78,8 @@ impl Server for DockerServer {
         Ok(())
     }
 
-    fn addr(&self) -> Option<SocketAddr> {
+    fn addr(&self) -> Option<HostData> {
         self.container_ip_addr
+            .map(|addr| HostData { host: self.container_name.as_str().into(), addr })
     }
 }

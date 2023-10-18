@@ -24,9 +24,9 @@ impl<S: Server> ServerManager<S> {
 
     /// Returns `true` if server should turn off.
     pub async fn probe(&mut self) -> bool {
-        if let Some(addr) = self.server.lock().await.addr() {
+        if let Some(host) = self.server.lock().await.addr() {
             let can_shutdown = async {
-                if let Some(status) = ping(addr).await {
+                if let Some(status) = ping(&host.host, host.addr).await {
                     tracing::info!("manager server health check completed");
                     if status.players.online > 0 {
                         tracing::info!(online = status.players.online, "players are on the server");
@@ -40,7 +40,7 @@ impl<S: Server> ServerManager<S> {
 
                 true
             }
-            .instrument(tracing::info_span!("health_check", %addr))
+            .instrument(tracing::info_span!("health_check", addr=%host.addr))
             .await;
 
             if !can_shutdown {
