@@ -46,7 +46,7 @@ async fn main() {
 
 async fn get_connection<S: Server>(server: &mut S) -> TcpStream {
     if let Some(host) = server.addr() {
-        if ping(&host.host, host.addr).await.is_some() {
+        if ping(&host.host, host.addr).await.is_ok() {
             return TcpStream::connect(host.addr).await.unwrap();
         }
     }

@@ -13,7 +13,7 @@ use crate::protocol::parsing::ParseError;
 
 mod parsing;
 
-pub async fn ping(host: &str, addr: SocketAddr) -> Option<parsing::JsonStatusResponse> {
+pub async fn ping(host: &str, addr: SocketAddr) -> Result<parsing::JsonStatusResponse, ()> {
     let port = addr.port();
 
     let mut socket = match timeout(Duration::from_secs(1), TcpStream::connect(addr))
@@ -26,11 +26,11 @@ pub async fn ping(host: &str, addr: SocketAddr) -> Option<parsing::JsonStatusRes
         }
         Some(Err(e)) => {
             tracing::warn!(%addr, %e, "error while connecting to host");
-            return None;
+            return Err(());
         }
         None => {
             tracing::warn!(%addr, "timeout while connecting to host");
-            return None;
+            return Err(());
         }
     };
 
@@ -52,7 +52,7 @@ pub async fn ping(host: &str, addr: SocketAddr) -> Option<parsing::JsonStatusRes
 
         if read == 0 {
             tracing::info!("connection closed");
-            return None;
+            return Err(());
         }
 
         total_read += read;
@@ -63,7 +63,7 @@ pub async fn ping(host: &str, addr: SocketAddr) -> Option<parsing::JsonStatusRes
 
                 socket.shutdown().await.unwrap();
 
-                return Some(s.1.json_response);
+                return Ok(s.1.json_response);
             }
             Err(ParseError::Incomplete) => (),
             Err(e) => panic!("{:?}", e),
@@ -71,12 +71,11 @@ pub async fn ping(host: &str, addr: SocketAddr) -> Option<parsing::JsonStatusRes
     }
 }
 
-pub async fn retry_ping(host: &str, addr: SocketAddr) -> Option<parsing::JsonStatusResponse> {
+pub async fn retry_ping(host: &str, addr: SocketAddr) -> Result<parsing::JsonStatusResponse, ()> {
     let strategy = FixedInterval::from_millis(500);
 
     Retry::spawn(strategy, || async {
-        ping(host, addr).await.ok_or("couldn't contact server")
+        ping(host, addr).await
     })
     .await
-    .ok()
 }
