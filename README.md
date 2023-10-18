@@ -1,4 +1,5 @@
 # minecraft_proxyd
+VERY EARLY ALPHA
 
 ## Working theory
 - When a user connects, we run a health check on the minecraft server.
