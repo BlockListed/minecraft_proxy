@@ -24,14 +24,16 @@ fn setup_logger() {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> color_eyre::Result<()> {
+    color_eyre::install()?;
+
     setup_logger();
 
     let listener = TcpListener::bind("127.0.0.1:2000".parse::<SocketAddr>().unwrap())
         .await
         .unwrap();
 
-    let server = Arc::new(Mutex::new(DockerServer::new("mc")));
+    let server = Arc::new(Mutex::new(DockerServer::new("mc").await));
 
     let manager = manager::ServerManager::new(Arc::clone(&server));
 

@@ -12,14 +12,18 @@ pub struct DockerServer {
 }
 
 impl DockerServer {
-    pub fn new(container_name: &str) -> Self {
+    pub async fn new(container_name: &str) -> Self {
         let docker = Docker::connect_with_socket_defaults().unwrap();
 
-        DockerServer {
+        let mut server = DockerServer {
             docker,
             container_name: container_name.to_string(),
             container_ip_addr: None,
-        }
+        };
+
+        server.test().await.expect("invalid docker server configuration");
+
+        server
     }
 
     pub async fn get_socket_addr(&self) -> SocketAddr {
@@ -50,16 +54,24 @@ impl DockerServer {
 
         SocketAddr::from((ip_addr, 25565))
     }
+
+    async fn test(&mut self) -> Result<(), ()> {
+        self.docker
+            .inspect_container(&self.container_name, None)
+            .await
+            .map(|_| ())
+            .map_err(|_| ())
+    }
 }
 
 #[async_trait::async_trait]
 impl Server for DockerServer {
-    async fn start(&mut self) -> std::io::Result<()> {
+
+    async fn start(&mut self) -> color_eyre::Result<()> {
         tracing::info!(container = self.container_name, "starting docker mc server");
         self.docker
             .start_container::<&'static str>(&self.container_name, None)
-            .await
-            .unwrap();
+            .await?;
 
         if self.container_ip_addr.is_none() {
             self.container_ip_addr = Some(self.get_socket_addr().await);
@@ -68,12 +80,11 @@ impl Server for DockerServer {
         Ok(())
     }
 
-    async fn stop(&mut self) -> std::io::Result<()> {
+    async fn stop(&mut self) -> color_eyre::Result<()> {
         tracing::info!(container = self.container_name, "stopping docker mc server");
         self.docker
             .stop_container(&self.container_name, None)
-            .await
-            .unwrap();
+            .await?;
 
         Ok(())
     }

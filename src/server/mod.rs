@@ -11,8 +11,8 @@ pub struct HostData<'a> {
 
 #[async_trait::async_trait]
 pub trait Server: Sized {
-    async fn start(&mut self) -> std::io::Result<()>;
-    async fn stop(&mut self) -> std::io::Result<()>;
+    async fn start(&mut self) -> color_eyre::Result<()>;
+    async fn stop(&mut self) -> color_eyre::Result<()>;
 
     fn addr(&self) -> Option<HostData>;
 }
