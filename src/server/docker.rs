@@ -1,5 +1,6 @@
 use std::net::{Ipv4Addr, SocketAddr};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use bollard::Docker;
 
@@ -7,7 +8,7 @@ use super::{Server, HostData};
 
 pub struct DockerServer {
     docker: Docker,
-    container_name: String,
+    container_name: Arc<str>,
     container_ip_addr: Option<SocketAddr>,
 }
 
@@ -17,7 +18,7 @@ impl DockerServer {
 
         let mut server = DockerServer {
             docker,
-            container_name: container_name.to_string(),
+            container_name: container_name.into(),
             container_ip_addr: None,
         };
 
@@ -68,7 +69,7 @@ impl DockerServer {
 impl Server for DockerServer {
 
     async fn start(&mut self) -> color_eyre::Result<()> {
-        tracing::info!(container = self.container_name, "starting docker mc server");
+        tracing::info!(container = %self.container_name, "starting docker mc server");
         self.docker
             .start_container::<&'static str>(&self.container_name, None)
             .await?;
@@ -81,7 +82,7 @@ impl Server for DockerServer {
     }
 
     async fn stop(&mut self) -> color_eyre::Result<()> {
-        tracing::info!(container = self.container_name, "stopping docker mc server");
+        tracing::info!(container = %self.container_name, "stopping docker mc server");
         self.docker
             .stop_container(&self.container_name, None)
             .await?;
@@ -91,6 +92,6 @@ impl Server for DockerServer {
 
     fn addr(&self) -> Option<HostData> {
         self.container_ip_addr
-            .map(|addr| HostData { host: self.container_name.as_str().into(), addr })
+            .map(|addr| HostData { host: self.container_name.clone(), addr })
     }
 }

@@ -1,11 +1,11 @@
-use std::borrow::Cow;
+use std::sync::Arc;
 use std::net::SocketAddr;
 
 pub mod docker;
 
 #[derive(Debug)]
-pub struct HostData<'a> {
-    pub host: Cow<'a, str>,
+pub struct HostData {
+    pub host: Arc<str>,
     pub addr: SocketAddr,
 }
 

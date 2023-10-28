@@ -33,7 +33,7 @@ impl<S: Server> ServerManager<S> {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn health_check(&mut self, host: HostData<'_>) -> Result<HealthCheck, ()> {
+    pub async fn health_check(&mut self, host: HostData) -> Result<HealthCheck, ()> {
         let Ok(status) = ping(&host.host, host.addr).await else {
             return Err(());
         };
@@ -58,8 +58,8 @@ impl<S: Server> ServerManager<S> {
     }
 
     // TODO: make this less ugly
-    pub async fn get_addr<'a, 'b>(&'a mut self) -> Option<HostData<'b>> {
-        self.server.lock().await.addr().map(|h| HostData { host: h.host.into_owned().into(), addr: h.addr })
+    pub async fn get_addr(&mut self) -> Option<HostData> {
+        self.server.lock().await.addr()
     }
 
     pub async fn probe(&mut self) -> ProbeResult {
