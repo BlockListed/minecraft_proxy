@@ -72,7 +72,7 @@ pub async fn ping(host: &str, addr: SocketAddr) -> Result<parsing::JsonStatusRes
 }
 
 pub async fn retry_ping(host: &str, addr: SocketAddr) -> Result<parsing::JsonStatusResponse, ()> {
-    let strategy = FixedInterval::from_millis(500);
+    let strategy = FixedInterval::from_millis(500).take(120 * 2);
 
     Retry::spawn(strategy, || async {
         ping(host, addr).await
