@@ -57,7 +57,6 @@ impl<S: Server> ServerManager<S> {
             .unwrap();
     }
 
-    // TODO: make this less ugly
     pub async fn get_addr(&mut self) -> Option<HostData> {
         self.server.lock().await.addr()
     }
