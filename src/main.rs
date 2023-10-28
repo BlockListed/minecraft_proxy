@@ -44,10 +44,10 @@ async fn main() {
     }
 }
 
-async fn get_connection<S: Server>(server: &mut S) -> TcpStream {
+async fn get_connection<S: Server>(server: &mut S) -> Result<TcpStream, ()> {
     if let Some(host) = server.addr() {
         if ping(&host.host, host.addr).await.is_ok() {
-            return TcpStream::connect(host.addr).await.unwrap();
+            return Ok(TcpStream::connect(host.addr).await.unwrap());
         }
     }
 
@@ -55,13 +55,15 @@ async fn get_connection<S: Server>(server: &mut S) -> TcpStream {
 
     let host = server.addr().unwrap();
 
-    retry_ping(&host.host, host.addr).await.unwrap();
+    retry_ping(&host.host, host.addr).await?;
 
-    TcpStream::connect(host.addr).await.unwrap()
+    Ok(TcpStream::connect(host.addr).await.unwrap())
 }
 
 async fn handle_conn<S: Server>(mut conn: TcpStream, server: Arc<Mutex<S>>) {
-    let mut mc_server = get_connection(&mut *server.lock().await).await;
+    let Ok(mut mc_server) = get_connection(&mut *server.lock().await).await else {
+        return;
+    };
 
     copy_bidirectional(&mut conn, &mut mc_server).await.unwrap();
 }
