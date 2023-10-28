@@ -309,7 +309,7 @@ pub fn parse_status_response(buf: &[u8]) -> Result<(usize, StatusResponse), Pars
     assert_eq!(packet_id, 0x00);
 
     let (_, json_response) = read_string(data)?;
-    tracing::debug!("got json response (should probably be deserialized)");
+    tracing::debug!("got json response");
 
     let json_response: JsonStatusResponse = serde_json::from_str(json_response).unwrap();
 
